@@ -1,10 +1,18 @@
 """Parse the Acuminator runner's JSON report into flat diagnostic records.
 
 The runner emits a recursive ``CodeSourceReport → ProjectReport → ReportGroup``
-structure. Each leaf diagnostic is a ``Line`` with three ``LineSpan`` entries:
-``[diagnosticId, message, "<file>(<line>,<column>)"]``.
+structure. Each leaf ``Line`` is serialized by Acuminator's ``LineConverter`` as
+a **plain JSON string** (not an object), in one of two shapes:
 
-This module walks that tree and yields flat :class:`Diagnostic` records.
+* 3-span (the common diagnostic shape):
+  ``"<diagnosticId>: <message>: <location>"``
+* 2-span (rare, used for some summary/suppression lines):
+  ``"<content>: <location>"``
+
+Where ``<location>`` is ``"<file>"(<line>,<column>)`` — quoted when
+``--output-absolute-paths-for-errors`` is set (we always pass that).
+
+This module walks the tree and produces flat :class:`Diagnostic` records.
 """
 
 from __future__ import annotations
@@ -16,8 +24,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-_LOCATION_PATTERN = re.compile(r'^"?(.+?)"?\((\d+),(\d+)\)"?$')
-_PX_CODE_PATTERN = re.compile(r"^PX\d{4}$")
+_LOCATION_PATTERN = re.compile(r'"?(?P<file>[^"]+?)"?\((?P<line>\d+),(?P<col>\d+)\)\s*$')
+_PX_CODE_PATTERN = re.compile(r"^(PX\d{4})\b")
 
 
 class Diagnostic(BaseModel):
@@ -35,55 +43,58 @@ class AnalysisResult(BaseModel):
     diagnostics: list[Diagnostic]
 
 
-def _parse_location(text: str) -> tuple[str | None, int | None, int | None]:
-    m = _LOCATION_PATTERN.match(text.strip())
-    if not m:
-        return None, None, None
-    try:
-        return m.group(1), int(m.group(2)), int(m.group(3))
-    except ValueError:
-        return m.group(1), None, None
+def _parse_line_string(text: str) -> tuple[str, str, str | None, int | None, int | None] | None:
+    """Parse one ``LineConverter``-formatted string into ``(code, message, file, line, col)``.
+
+    Returns ``None`` if the string isn't a PX diagnostic (e.g. summary rows).
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    loc_match = _LOCATION_PATTERN.search(stripped)
+    file_path: str | None = None
+    line_no: int | None = None
+    col_no: int | None = None
+    if loc_match:
+        file_path = loc_match.group("file")
+        try:
+            line_no = int(loc_match.group("line"))
+            col_no = int(loc_match.group("col"))
+        except ValueError:
+            line_no = col_no = None
+        prefix = stripped[: loc_match.start()].rstrip()
+        prefix = prefix.rstrip(":").rstrip()
+    else:
+        prefix = stripped
+
+    code_match = _PX_CODE_PATTERN.match(prefix)
+    if not code_match:
+        return None
+    code = code_match.group(1)
+    remainder = prefix[code_match.end() :].lstrip(":").strip()
+    message = remainder or "(no message)"
+    return code, message, file_path, line_no, col_no
 
 
-def _spans_text(line: dict[str, Any]) -> list[str]:
-    spans = line.get("spans") or []
-    out: list[str] = []
-    for s in spans:
-        text = s.get("text") if isinstance(s, dict) else None
-        if text:
-            out.append(text)
-    return out
-
-
-def _walk_groups(node: dict[str, Any]):
+def _walk_lines(node: dict[str, Any]):
+    """Yield every ``Line`` (string) anywhere beneath ``node`` in the ReportGroup tree."""
     yield from node.get("lines") or []
     for child in node.get("childrenGroups") or []:
-        yield from _walk_groups(child)
+        yield from _walk_lines(child)
 
 
 def _extract_diagnostics(project_name: str, report_details: dict[str, Any] | None) -> list[Diagnostic]:
     if not report_details:
         return []
     out: list[Diagnostic] = []
-    for line in _walk_groups(report_details):
-        texts = _spans_text(line)
-        if not texts:
+    for raw_line in _walk_lines(report_details):
+        if not isinstance(raw_line, str):
             continue
-        code = next((t for t in texts if _PX_CODE_PATTERN.match(t)), None)
-        if not code:
+        parsed = _parse_line_string(raw_line)
+        if parsed is None:
             continue
-        remaining = [t for t in texts if t != code]
-        file_path: str | None = None
-        line_no: int | None = None
-        col_no: int | None = None
-        message_parts: list[str] = []
-        for t in remaining:
-            f, ln, col = _parse_location(t)
-            if f and file_path is None:
-                file_path, line_no, col_no = f, ln, col
-            else:
-                message_parts.append(t)
-        message = " ".join(message_parts).strip() or "(no message)"
+        code, message, file_path, line_no, col_no = parsed
         out.append(
             Diagnostic(
                 code=code,
