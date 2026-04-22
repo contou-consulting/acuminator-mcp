@@ -19,18 +19,32 @@ The runner itself is downloaded and cached on first use
 
 ## Installation
 
-From PyPI (recommended for most users):
+Distributed internally via GitHub — not published to PyPI. Employees need
+read access to `contou-consulting/acuminator-mcp` (org members already do).
+
+**From Git (simplest, tracks a branch or tag):**
 
 ```powershell
-pipx install acuminator-mcp
-# or with uv
-uv tool install acuminator-mcp
+# latest main
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
+
+# pin to a release
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v0.1.0
 ```
 
-From Git (for internal pre-release pulls):
+`uv tool install` works the same way, swap `pipx install` for `uv tool install`.
+
+**From a GitHub Release wheel** (no git clone, faster):
 
 ```powershell
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
+pipx install https://github.com/contou-consulting/acuminator-mcp/releases/download/v0.1.0/acuminator_mcp-0.1.0-py3-none-any.whl
+```
+
+First-time `git+https` clones need `gh auth` or a PAT. The easiest setup is:
+
+```powershell
+gh auth login
+gh auth setup-git
 ```
 
 ## Claude / MCP client configuration
@@ -132,15 +146,12 @@ python -m venv .venv
 
 ## Releasing
 
-Releases publish to PyPI via [trusted publishing](https://docs.pypi.org/trusted-publishers/):
-
 1. Bump `version` in `pyproject.toml` and `src/acuminator_mcp/__init__.py`.
 2. Commit and push.
 3. `git tag vX.Y.Z && git push --tags`.
-4. The `Release` workflow builds and publishes; a GitHub release is created automatically.
-
-One-time PyPI setup: configure a trusted publisher for `contou-consulting/acuminator-mcp`
-on PyPI with workflow `release.yml` and environment `pypi`.
+4. The `Release` workflow builds the sdist + wheel and creates a GitHub release
+   with both attached. Employees can then `pipx install` the wheel URL or pin
+   their `git+https` install to the new tag.
 
 ## License
 
