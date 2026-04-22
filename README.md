@@ -8,94 +8,106 @@ Acumatica ERP customizations. Lets an AI agent:
 - analyze a raw C# snippet against a reference Acumatica project,
 - and look up official documentation for any `PXNNNN` diagnostic code.
 
-## Requirements
+**Requirements**
 
-- **Windows** with **.NET Framework 4.8** (the Acuminator console runner is
-  `Acuminator.Runner.NetFramework.exe` — `net48`-only).
-- Python 3.10 or newer.
+- **Windows** with **.NET Framework 4.8** — `Acuminator.Runner.NetFramework.exe` is `net48`-only.
+- **Python 3.10+**.
+- **`pipx`** (or `uv`, or any isolated-tool installer). [Install pipx](#install-pipx).
+- **`gh` CLI** logged in with access to `contou-consulting` (repo is private).
 
-The runner itself is downloaded and cached on first use
-(`%LOCALAPPDATA%\acuminator-mcp\runner\v<version>`); no manual install required.
+The runner itself is downloaded and cached automatically on first use at
+`%LOCALAPPDATA%\acuminator-mcp\runner\v<version>`.
 
-## Installation
+---
 
-Distributed internally via GitHub — not published to PyPI. Employees need
-read access to `contou-consulting/acuminator-mcp` (org members already do).
+## 1. Install
 
-**From Git (simplest, tracks a branch or tag):**
+### Install pipx
 
-```powershell
-# latest main
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
-
-# pin to a release
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v0.1.0
-```
-
-`uv tool install` works the same way, swap `pipx install` for `uv tool install`.
-
-**From a GitHub Release wheel** (no git clone, faster):
+If you don't already have `pipx`:
 
 ```powershell
-pipx install https://github.com/contou-consulting/acuminator-mcp/releases/download/v0.1.0/acuminator_mcp-0.1.0-py3-none-any.whl
+py -m pip install --user pipx
+py -m pipx ensurepath
 ```
 
-First-time `git+https` clones need `gh auth` or a PAT. The easiest setup is:
+Restart your terminal, then verify: `pipx --version`. (`winget install pipx` and `scoop install pipx` also work.)
+
+### Authenticate with GitHub
+
+The repo is private, so installing needs your GitHub creds on git:
 
 ```powershell
 gh auth login
 gh auth setup-git
 ```
 
-## Using it in Claude Code
+### Install the server
 
-Install the server once (`pipx install ...` above), then register it with
-Claude Code. Pick the scope that matches how you want the server to appear:
+```powershell
+# pin to a release (recommended)
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v0.1.0
+
+# or track main
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
+```
+
+`uv` works the same way — swap `pipx install` for `uv tool install`.
+
+Verify the server launches:
+
+```powershell
+acuminator-mcp --help   # prints nothing; it's a stdio server. Ctrl+C exits.
+```
+
+### Upgrading
+
+```powershell
+pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v0.2.0
+```
+
+---
+
+## 2. Use
+
+### In Claude Code
+
+Pick the scope that matches how you want the server to appear:
 
 | Scope | Where it lives | When to use |
 |---|---|---|
-| `local` (default) | `.claude/settings.local.json` in the current project | You only want it in this repo for yourself |
-| `project` | `.mcp.json` at the repo root, checked into git | Share it with everyone on the team who clones the repo |
-| `user` | `~/.claude.json` | You want it everywhere, on every project |
+| `local` (default) | `.claude/settings.local.json` in the current project | Just you, just this repo |
+| `project` | `.mcp.json` at the repo root, checked into git | Share with everyone cloning the repo |
+| `user` | `~/.claude.json` | Everywhere, every project, on this machine |
 
-**Register the server:**
+Register the server:
 
 ```powershell
-# user-scoped: available in every project on this machine
+# user-scoped: available in every project
 claude mcp add --scope user acuminator acuminator-mcp
 
-# project-scoped: committed to .mcp.json so teammates get it automatically
+# project-scoped: committed to .mcp.json
 claude mcp add --scope project acuminator acuminator-mcp
 ```
 
-**Point the snippet tool at a reference Acumatica project** (required for
-`analyze_snippet`; optional but harmless otherwise):
+Point the snippet tool at a reference Acumatica project (needed for `analyze_snippet`; harmless otherwise):
 
 ```powershell
 claude mcp add --scope user acuminator acuminator-mcp `
   --env ACUMINATOR_MCP_REFERENCE_PROJECT=C:\src\my-acumatica-ext\MyExt.csproj
 ```
 
-**Verify it's connected** — inside a Claude Code session:
+Verify it connected — inside a Claude Code session:
 
 ```
 /mcp
 ```
 
-You should see `acuminator` listed as *connected* with three tools:
-`analyze_project`, `analyze_snippet`, `get_diagnostic_docs`.
+You should see `acuminator` listed as *connected* with three tools.
 
-**Example prompts** once it's wired up:
+### In Claude Desktop
 
-- *"Run acuminator on `C:\src\MyExt\MyExt.csproj` and explain any PX1014 hits."*
-- *"Use the snippet analyzer on this DAC and look up the docs for any
-  diagnostics it reports."*
-- *"What does PX1030 mean and how do I fix it?"*
-
-### Claude Desktop (for reference)
-
-If you're also using the desktop app, add a stdio entry in
-`claude_desktop_config.json`:
+Edit `claude_desktop_config.json`:
 
 ```json
 {
@@ -110,9 +122,17 @@ If you're also using the desktop app, add a stdio entry in
 }
 ```
 
-## Tools
+Restart Claude Desktop.
 
-### `analyze_project`
+### Sample prompts
+
+- *"Run acuminator on `C:\src\MyExt\MyExt.csproj` and explain any PX1014 hits."*
+- *"Use the snippet analyzer on this DAC and look up the docs for every diagnostic it reports."*
+- *"What does PX1030 mean and how do I fix it?"*
+
+### Tools
+
+#### `analyze_project`
 
 Run Acuminator against an Acumatica `.csproj` or `.sln`.
 
@@ -143,36 +163,31 @@ Returns `AnalysisResult`:
 }
 ```
 
-### `analyze_snippet`
+#### `analyze_snippet`
 
-Analyze a raw C# snippet. Because Acuminator relies on Acumatica Framework
-types for semantic analysis, snippets are planted into a user-supplied
-**reference project** whose references already resolve `PX.Data` etc.
+Analyze a raw C# snippet against a reference Acumatica project so Acuminator sees the full `PX.Data` type environment. Configure either via `ACUMINATOR_MCP_REFERENCE_PROJECT` or pass `reference_project_path`. Returns only diagnostics targeting the snippet.
 
-Configure the reference project in one of two ways:
+The server writes a temp `.cs` file into the reference project's directory, runs the analyzer, and deletes the file — so point it at a scratch project, not one with active locks.
 
-1. Set `ACUMINATOR_MCP_REFERENCE_PROJECT` to an Acumatica `.csproj`.
-2. Pass `reference_project_path` to the tool call.
+#### `get_diagnostic_docs`
 
-The server writes a temp `.cs` file into the project directory, runs the
-analyzer, and cleans up — so point it at a scratch/test project, not a
-production project you have locks on.
-
-### `get_diagnostic_docs`
-
-Fetches the markdown docs for a `PXNNNN` code from
+Fetches the markdown at
 `https://raw.githubusercontent.com/Acumatica/Acuminator/refs/heads/master/docs/diagnostics/<code>.md`
 and caches to disk.
 
-## Environment variables
+### Environment variables
 
 | Variable | Purpose |
 |---|---|
+| `ACUMINATOR_MCP_REFERENCE_PROJECT` | Default reference project for `analyze_snippet`. |
 | `ACUMINATOR_MCP_RUNNER_VERSION` | Pin a different runner release (default: `4.0.1`). |
 | `ACUMINATOR_MCP_CACHE` | Override the on-disk cache root. |
-| `ACUMINATOR_MCP_REFERENCE_PROJECT` | Default reference project for `analyze_snippet`. |
 
-## Development
+---
+
+## 3. Develop & Debug
+
+### Local setup
 
 ```powershell
 git clone https://github.com/contou-consulting/acuminator-mcp.git
@@ -183,14 +198,99 @@ python -m venv .venv
 .venv\Scripts\ruff check .
 ```
 
-## Releasing
+### Debugging the MCP server
+
+#### MCP Inspector (the best first tool)
+
+The [official MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+spawns the server over stdio and gives you a browser UI where you can list
+tools, invoke them with arbitrary arguments, and see the raw JSON-RPC traffic.
+
+```powershell
+# requires Node.js
+npx @modelcontextprotocol/inspector acuminator-mcp
+```
+
+For a dev checkout (no install):
+
+```powershell
+npx @modelcontextprotocol/inspector .venv\Scripts\python.exe -m acuminator_mcp
+```
+
+Open the URL it prints, pick a tool, fill in the parameters, click **Run Tool**. Exceptions raised by the tool show up as MCP errors; the whole JSON-RPC exchange is visible in the *History* pane.
+
+#### Inside Claude Code
+
+List connected servers and their state:
+
+```
+/mcp
+```
+
+Launch Claude Code with verbose MCP logging to see every request/response:
+
+```powershell
+claude --mcp-debug
+```
+
+Claude Code logs include the stdout/stderr of each MCP server it spawns — check them if a server silently fails to connect.
+
+#### Verify the underlying Acuminator runner works
+
+If `analyze_project` fails, isolate whether the problem is in the Python glue or in the runner itself. Resolve and run the exe directly:
+
+```powershell
+$exe = .venv\Scripts\python.exe -c "import asyncio; from acuminator_mcp.runner import ensure_runner; print(asyncio.run(ensure_runner()))"
+& $exe --help
+& $exe "C:\src\MyExt\MyExt.csproj" --format json -f report.json --non-interactive
+```
+
+If the runner itself fails, it's almost always one of:
+- Missing .NET Framework 4.8.
+- The `.csproj`/`.sln` doesn't restore cleanly (run `msbuild /t:Restore` on it first).
+- Path has unescaped spaces or non-ASCII characters.
+
+#### Invoke a tool directly from Python
+
+The tools are plain async functions — drop into a REPL and call them:
+
+```powershell
+.venv\Scripts\python.exe -c "import asyncio; from acuminator_mcp.docs import get_diagnostic_docs; print(asyncio.run(get_diagnostic_docs('PX1014'))[:400])"
+```
+
+```powershell
+.venv\Scripts\python.exe -c "import asyncio; from acuminator_mcp.snippet import analyze_snippet; import json; r = asyncio.run(analyze_snippet('public class Foo : PXGraph<Foo> {}', reference_project_path=r'C:\src\scratch\Scratch.csproj')); print(r.model_dump_json(indent=2))"
+```
+
+#### Clearing caches
+
+If something got wedged — stale runner, stale docs:
+
+```powershell
+Remove-Item -Recurse -Force $env:LOCALAPPDATA\acuminator-mcp
+```
+
+Next tool invocation will re-download.
+
+#### Common failure modes
+
+| Symptom | Likely cause |
+|---|---|
+| `Acuminator runner requires Windows + .NET Framework 4.8` | You're on macOS/Linux, or .NET Fx 4.8 isn't installed. |
+| `No reference project configured` | `analyze_snippet` called without `ACUMINATOR_MCP_REFERENCE_PROJECT` set and no `reference_project_path` argument. |
+| `Acuminator did not produce a JSON report` | The runner crashed before writing output. Re-run with the **standalone runner** step above to see its stderr. |
+| `HTTP 404` when fetching docs | The diagnostic code isn't in the public docs folder (some internal-only codes aren't published). |
+| Claude Code shows server as *disconnected* | Usually means `acuminator-mcp` isn't on `PATH`. Run `where.exe acuminator-mcp` to confirm. |
+
+### Releasing
 
 1. Bump `version` in `pyproject.toml` and `src/acuminator_mcp/__init__.py`.
 2. Commit and push.
 3. `git tag vX.Y.Z && git push --tags`.
 4. The `Release` workflow builds the sdist + wheel and creates a GitHub release
-   with both attached. Employees can then `pipx install` the wheel URL or pin
-   their `git+https` install to the new tag.
+   with both attached. Employees pin their `pipx install git+https://...@vX.Y.Z` to the new tag.
+
+---
 
 ## License
 
