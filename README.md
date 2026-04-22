@@ -47,10 +47,55 @@ gh auth login
 gh auth setup-git
 ```
 
-## Claude / MCP client configuration
+## Using it in Claude Code
 
-Add a stdio server entry pointing at the installed `acuminator-mcp` script.
-Example for Claude Desktop (`claude_desktop_config.json`):
+Install the server once (`pipx install ...` above), then register it with
+Claude Code. Pick the scope that matches how you want the server to appear:
+
+| Scope | Where it lives | When to use |
+|---|---|---|
+| `local` (default) | `.claude/settings.local.json` in the current project | You only want it in this repo for yourself |
+| `project` | `.mcp.json` at the repo root, checked into git | Share it with everyone on the team who clones the repo |
+| `user` | `~/.claude.json` | You want it everywhere, on every project |
+
+**Register the server:**
+
+```powershell
+# user-scoped: available in every project on this machine
+claude mcp add --scope user acuminator acuminator-mcp
+
+# project-scoped: committed to .mcp.json so teammates get it automatically
+claude mcp add --scope project acuminator acuminator-mcp
+```
+
+**Point the snippet tool at a reference Acumatica project** (required for
+`analyze_snippet`; optional but harmless otherwise):
+
+```powershell
+claude mcp add --scope user acuminator acuminator-mcp `
+  --env ACUMINATOR_MCP_REFERENCE_PROJECT=C:\src\my-acumatica-ext\MyExt.csproj
+```
+
+**Verify it's connected** — inside a Claude Code session:
+
+```
+/mcp
+```
+
+You should see `acuminator` listed as *connected* with three tools:
+`analyze_project`, `analyze_snippet`, `get_diagnostic_docs`.
+
+**Example prompts** once it's wired up:
+
+- *"Run acuminator on `C:\src\MyExt\MyExt.csproj` and explain any PX1014 hits."*
+- *"Use the snippet analyzer on this DAC and look up the docs for any
+  diagnostics it reports."*
+- *"What does PX1030 mean and how do I fix it?"*
+
+### Claude Desktop (for reference)
+
+If you're also using the desktop app, add a stdio entry in
+`claude_desktop_config.json`:
 
 ```json
 {
@@ -63,12 +108,6 @@ Example for Claude Desktop (`claude_desktop_config.json`):
     }
   }
 }
-```
-
-Claude Code:
-
-```powershell
-claude mcp add acuminator acuminator-mcp
 ```
 
 ## Tools
