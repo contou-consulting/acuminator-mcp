@@ -105,9 +105,10 @@ async def analyze_project(
 @mcp.tool(
     description=(
         "Analyze a raw C# snippet using an existing Acumatica reference project for its "
-        "type environment. Set ACUMINATOR_MCP_REFERENCE_PROJECT env var, or pass "
-        "reference_project_path, to a .csproj whose references resolve the Acumatica "
-        "Framework. Returns only diagnostics reported against the snippet."
+        "type environment. The reference project is auto-discovered from the server's "
+        "working directory (first .csproj found walking up, then scanning down); pass "
+        "reference_project_path or set ACUMINATOR_MCP_REFERENCE_PROJECT to override. "
+        "Returns only diagnostics reported against the snippet."
     ),
 )
 async def analyze_snippet(

@@ -165,9 +165,20 @@ Returns `AnalysisResult`:
 
 #### `analyze_snippet`
 
-Analyze a raw C# snippet against a reference Acumatica project so Acuminator sees the full `PX.Data` type environment. Configure either via `ACUMINATOR_MCP_REFERENCE_PROJECT` or pass `reference_project_path`. Returns only diagnostics targeting the snippet.
+Analyze a raw C# snippet against a **reference Acumatica project** so Acuminator
+sees the full `PX.Data` type environment. The server picks the reference
+project in this order:
 
-The server writes a temp `.cs` file into the reference project's directory, runs the analyzer, and deletes the file — so point it at a scratch project, not one with active locks.
+1. Explicit `reference_project_path` argument.
+2. `ACUMINATOR_MCP_REFERENCE_PROJECT` env var.
+3. Auto-discovery from the server's CWD — walks up looking for any `.csproj`,
+   then BFS-scans down (skipping `bin`, `obj`, `packages`, etc). When the MCP
+   server is launched with CWD at an Acumatica repo root, this "just works".
+
+Returns only diagnostics that target the snippet. The server writes a temp
+`.cs` file into the project's directory, runs the analyzer, and deletes the
+file. Consider adding `AcuminatorMcpSnippet_*.cs` to your `.gitignore` in case
+a crash ever orphans one.
 
 #### `get_diagnostic_docs`
 
