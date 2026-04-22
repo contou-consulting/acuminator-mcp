@@ -1,8 +1,8 @@
 """Tests for the Acuminator JSON report parser.
 
-Acuminator's ``LineConverter`` serializes each ``Line`` as a plain JSON string
-shaped like ``"PX1014: <message>: \\"<file>\\"(<line>,<col>)"``. These fixtures
-match that real shape.
+Fixtures mirror the real runner output: ``Line`` strings in Roslyn's
+``FileLinePositionSpan.ToString()`` format, and ``groupTitle`` strings that
+TitleConverter flattens to a plain string per its Write method.
 """
 
 from __future__ import annotations
@@ -12,125 +12,148 @@ import json
 from acuminator_mcp.report import parse_report
 
 
-def _span_report(project_name: str, lines: list[str]) -> dict:
+def _report(project_name: str, tree: dict) -> dict:
     return {
         "codeSourceName": "Solution.sln",
-        "totalDiagnosticsCount": len(lines),
+        "totalDiagnosticsCount": 0,
         "projectReports": [
             {
                 "projectName": project_name,
-                "totalDiagnosticsCount": len(lines),
-                "distinctDiagnosticsCount": 1,
-                "reportDetails": {
-                    "groupTitle": project_name,
-                    "totalDiagnosticsCount": len(lines),
-                    "distinctDiagnosticsCount": 1,
-                    "lines": lines,
-                    "childrenGroups": [],
-                    "hasContent": True,
-                },
+                "reportDetails": tree,
             }
         ],
     }
 
 
-def test_three_span_lines_are_parsed() -> None:
-    report = _span_report(
-        "MyProject",
-        [
-            'PX1014: DAC should have a primary key: "C:\\src\\Foo.cs"(12,5)',
-            'PX1030: Use PXDefaultAttribute on the primary key field: "C:\\src\\Foo.cs"(20,9)',
-        ],
-    )
-    result = parse_report(json.dumps(report))
-    assert result.total_diagnostics == 2
-    assert [d.code for d in result.diagnostics] == ["PX1014", "PX1030"]
-    first = result.diagnostics[0]
-    assert first.message == "DAC should have a primary key"
-    assert first.file == "C:\\src\\Foo.cs"
-    assert first.line == 12
-    assert first.column == 5
-    assert first.project == "MyProject"
-
-
-def test_nested_report_groups_are_walked() -> None:
-    """Lines inside childrenGroups (used when ``-g fd`` is applied) are flattened."""
-    report = {
-        "codeSourceName": "Solution.sln",
-        "totalDiagnosticsCount": 1,
-        "projectReports": [
-            {
-                "projectName": "Nested",
-                "reportDetails": {
-                    "lines": [],
-                    "childrenGroups": [
-                        {
-                            "groupTitle": "Foo.cs",
-                            "lines": [],
-                            "childrenGroups": [
-                                {
-                                    "groupTitle": "PX1014",
-                                    "lines": [
-                                        'PX1014: DAC should have a primary key: "Foo.cs"(7,3)'
-                                    ],
-                                }
-                            ],
-                        }
+def test_two_span_line_uses_inherited_group_title_as_code() -> None:
+    """Grouped-by-ID case: line has no inline PX####; code lives on the parent ReportGroup."""
+    report = _report(
+        "MyProj",
+        {
+            "lines": [],
+            "childrenGroups": [
+                {
+                    "groupTitle": "PX1075",
+                    "lines": [
+                        'Event handlers should be protected virtual: "D:\\src\\Foo.cs: (68,22)-(68,23)"'
                     ],
-                },
-            }
-        ],
-    }
+                }
+            ],
+        },
+    )
     result = parse_report(json.dumps(report))
     assert result.total_diagnostics == 1
     d = result.diagnostics[0]
-    assert d.code == "PX1014"
-    assert d.file == "Foo.cs"
-    assert d.line == 7
-    assert d.column == 3
+    assert d.code == "PX1075"
+    assert d.file == "D:\\src\\Foo.cs"
+    assert d.line == 69
+    assert d.column == 23
+    assert d.project == "MyProj"
 
 
-def test_messages_containing_colons_and_quotes_are_preserved() -> None:
-    """Message can contain ``: `` — we anchor the location match at the end of the string."""
-    msg = 'The type \'Foo\': expected "Bar" here'
-    report = _span_report(
-        "MyProject",
-        [f'PX1099: {msg}: "C:\\src\\Foo.cs"(3,11)'],
+def test_three_span_line_carries_its_own_code() -> None:
+    """Ungrouped case: line starts with PX####, no parent title needed."""
+    report = _report(
+        "MyProj",
+        {
+            "lines": [
+                'PX1014: DAC should have a primary key: "C:\\src\\Foo.cs: (11,4)-(11,16)"'
+            ],
+            "childrenGroups": [],
+        },
     )
-    result = parse_report(json.dumps(report))
-    d = result.diagnostics[0]
+    d = parse_report(json.dumps(report)).diagnostics[0]
+    assert d.code == "PX1014"
+    assert d.line == 12
+    assert d.column == 5
+
+
+def test_inline_code_beats_inherited_code() -> None:
+    """If both are present, the inline PX#### on the line wins."""
+    report = _report(
+        "MyProj",
+        {
+            "groupTitle": "PX1030",
+            "lines": [
+                'PX1014: DAC should have a primary key: "C:\\src\\Foo.cs: (0,0)-(0,5)"'
+            ],
+            "childrenGroups": [],
+        },
+    )
+    assert parse_report(json.dumps(report)).diagnostics[0].code == "PX1014"
+
+
+def test_nested_groups_propagate_the_nearest_px_title() -> None:
+    report = _report(
+        "MyProj",
+        {
+            "groupTitle": "File-level group (no code here)",
+            "lines": [],
+            "childrenGroups": [
+                {
+                    "groupTitle": "Foo.cs",
+                    "lines": [],
+                    "childrenGroups": [
+                        {
+                            "groupTitle": "PX1099",
+                            "lines": [
+                                'Banned API usage: "Foo.cs: (4,8)-(4,20)"'
+                            ],
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    d = parse_report(json.dumps(report)).diagnostics[0]
     assert d.code == "PX1099"
-    assert d.message == msg
-    assert d.file == "C:\\src\\Foo.cs"
+    assert d.line == 5
+    assert d.column == 9
 
 
-def test_lines_without_a_px_code_are_ignored() -> None:
-    """Summary rows (no PX prefix) must not produce records."""
-    report = _span_report("MyProject", ["Found 0 errors in 3 files."])
-    result = parse_report(json.dumps(report))
-    assert result.diagnostics == []
+def test_line_without_a_discoverable_code_is_skipped() -> None:
+    """No inline code, no PX#### ancestor title — can't produce a valid diagnostic."""
+    report = _report(
+        "MyProj",
+        {
+            "groupTitle": "Summary",
+            "lines": ['Found 0 errors: "_: (0,0)-(0,0)"'],
+            "childrenGroups": [],
+        },
+    )
+    assert parse_report(json.dumps(report)).diagnostics == []
 
 
-def test_line_without_location_still_yields_a_record() -> None:
-    report = _span_report("MyProject", ["PX1014: DAC should have a primary key"])
-    result = parse_report(json.dumps(report))
-    d = result.diagnostics[0]
+def test_line_without_a_parseable_location_still_yields_code_only() -> None:
+    report = _report(
+        "MyProj",
+        {
+            "groupTitle": "PX1014",
+            "lines": ["Some unstructured message with no location"],
+            "childrenGroups": [],
+        },
+    )
+    d = parse_report(json.dumps(report)).diagnostics[0]
     assert d.code == "PX1014"
     assert d.file is None
     assert d.line is None
     assert d.column is None
-    assert d.message == "DAC should have a primary key"
+
+
+def test_non_string_line_items_are_skipped() -> None:
+    report = _report(
+        "MyProj",
+        {
+            "groupTitle": "PX1014",
+            "lines": [{"unexpected": "shape"}],
+            "childrenGroups": [],
+        },
+    )
+    assert parse_report(json.dumps(report)).diagnostics == []
 
 
 def test_empty_report_is_parsed() -> None:
     report = {"codeSourceName": "Empty.sln", "totalDiagnosticsCount": 0, "projectReports": []}
     result = parse_report(json.dumps(report))
     assert result.total_diagnostics == 0
-    assert result.diagnostics == []
-
-
-def test_non_string_line_items_are_skipped() -> None:
-    """Defensive: if the runner ever emits something other than a string, skip it."""
-    report = _span_report("MyProject", [{"unexpected": "shape"}])  # type: ignore[list-item]
-    result = parse_report(json.dumps(report))
     assert result.diagnostics == []

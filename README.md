@@ -153,7 +153,6 @@ Returns `AnalysisResult`:
   "diagnostics": [
     {
       "code": "PX1014",
-      "message": "DAC should have a primary key",
       "file": "C:\\src\\MyExt\\DAC\\CTCWidget.cs",
       "line": 12,
       "column": 5,
@@ -162,6 +161,10 @@ Returns `AnalysisResult`:
   ]
 }
 ```
+
+Diagnostic messages are intentionally omitted — the code is a stable handle.
+Call `get_diagnostic_docs` with the returned code for the full rationale and
+fix.
 
 #### `analyze_snippet`
 
