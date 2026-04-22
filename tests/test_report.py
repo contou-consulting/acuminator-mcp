@@ -111,6 +111,26 @@ def test_nested_groups_propagate_the_nearest_px_title() -> None:
     assert d.column == 9
 
 
+def test_message_with_quoted_names_does_not_capture_them_as_file() -> None:
+    """PX1069 et al embed quoted DAC/field names in the message. The file
+    regex has to anchor on the real location's opening quote, not the first
+    quote it sees — otherwise ``file`` ends up containing the whole message.
+    """
+    line = (
+        '"LSJMForecastsFilter" DAC must declare the mandatory "tstamp", '
+        '"CreatedByID", "LastModifiedDateTime" DAC fields: '
+        '"D:\\Repos\\janMarini\\src\\LSJMForecastsFilter.cs: (12,13)-(12,38)"'
+    )
+    report = _report("MyProj", {
+        "childrenGroups": [{"groupTitle": "PX1069", "lines": [line]}],
+    })
+    d = parse_report(json.dumps(report)).diagnostics[0]
+    assert d.code == "PX1069"
+    assert d.file == "D:\\Repos\\janMarini\\src\\LSJMForecastsFilter.cs"
+    assert d.line == 13
+    assert d.column == 14
+
+
 def test_line_without_a_discoverable_code_is_skipped() -> None:
     """No inline code, no PX#### ancestor title — can't produce a valid diagnostic."""
     report = _report(

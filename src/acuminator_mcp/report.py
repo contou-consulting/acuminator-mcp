@@ -31,7 +31,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 _LOCATION_PATTERN = re.compile(
-    r'"(?P<file>.+?):\s*\((?P<line>\d+),(?P<col>\d+)\)(?:-\(\d+,\d+\))?"\s*$'
+    r'"(?P<file>[^"]+?):\s*\((?P<line>\d+),(?P<col>\d+)\)(?:-\(\d+,\d+\))?"\s*$'
 )
 _PX_CODE_PATTERN = re.compile(r"^(PX\d{4})\b")
 
