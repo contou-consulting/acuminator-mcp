@@ -46,7 +46,7 @@ gh auth setup-git
 
 ```powershell
 # pin to a release (recommended)
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v0.1.0
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v1.0.0
 
 # or track main
 pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
@@ -63,7 +63,7 @@ acuminator-mcp --help   # prints nothing; it's a stdio server. Ctrl+C exits.
 ### Upgrading
 
 ```powershell
-pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v0.2.0
+pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.0.1
 ```
 
 ---
@@ -169,14 +169,31 @@ fix.
 #### `analyze_snippet`
 
 Analyze a raw C# snippet against a **reference Acumatica project** so Acuminator
-sees the full `PX.Data` type environment. The server picks the reference
-project in this order:
+sees the full `PX.Data` type environment.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `code` | `string` | — | The C# snippet. May be a full compilation unit (starts with `using` or `namespace`) or just type declarations — see auto-wrapping below. |
+| `reference_project_path` | `string` | — | Optional absolute path to the reference `.csproj`. Overrides the env var and auto-discovery. |
+| `isv_mode` | `bool` | `false` | Stricter analysis; promotes some warnings to errors. |
+
+The server picks the reference project in this order:
 
 1. Explicit `reference_project_path` argument.
 2. `ACUMINATOR_MCP_REFERENCE_PROJECT` env var.
 3. Auto-discovery from the server's CWD — walks up looking for any `.csproj`,
    then BFS-scans down (skipping `bin`, `obj`, `packages`, etc). When the MCP
    server is launched with CWD at an Acumatica repo root, this "just works".
+
+**Auto-wrapping.** If `code` doesn't already start with `using` or `namespace`,
+the server wraps it with `using PX.Data; using PX.Objects;` and a
+`namespace AcuminatorMcp.Snippet { … }` block before analysis. This lets you
+submit just a DAC or graph class without boilerplate, but it shifts the
+`line`/`column` in returned diagnostics by the size of the injected prelude
+(the prelude is 5 lines, so a diagnostic at line 7 corresponds to line 2 of
+your input). Pass a snippet that starts with `using` or `namespace` yourself
+if you want line numbers to match your input exactly, or need usings the
+default doesn't include.
 
 Returns only diagnostics that target the snippet. The server writes a temp
 `.cs` file into the project's directory, runs the analyzer, and deletes the
@@ -291,7 +308,7 @@ Next tool invocation will re-download.
 | Symptom | Likely cause |
 |---|---|
 | `Acuminator runner requires Windows + .NET Framework 4.8` | You're on macOS/Linux, or .NET Fx 4.8 isn't installed. |
-| `No reference project configured` | `analyze_snippet` called without `ACUMINATOR_MCP_REFERENCE_PROJECT` set and no `reference_project_path` argument. |
+| `No reference project found. Tried …` | `analyze_snippet` called without `ACUMINATOR_MCP_REFERENCE_PROJECT` set, no `reference_project_path` argument, and auto-discovery from the server's CWD turned up no `.csproj`. |
 | `Acuminator did not produce a JSON report` | The runner crashed before writing output. Re-run with the **standalone runner** step above to see its stderr. |
 | `HTTP 404` when fetching docs | The diagnostic code isn't in the public docs folder (some internal-only codes aren't published). |
 | Claude Code shows server as *disconnected* | Usually means `acuminator-mcp` isn't on `PATH`. Run `where.exe acuminator-mcp` to confirm. |
