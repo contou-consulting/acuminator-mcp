@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Annotated
 
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 from pydantic import Field
 
 from acuminator_mcp import runner, snippet
@@ -23,14 +24,22 @@ from acuminator_mcp.snippet import SnippetError
 
 mcp = FastMCP("acuminator-mcp")
 
+_STANDARD_ANNOTATIONS = ToolAnnotations(
+    readOnlyHint=True,
+    destructiveHint=False,
+    idempotentHint=True,
+    openWorldHint=True,
+)
+
 
 @mcp.tool(
     description=(
         "Run Acuminator static analysis against an Acumatica .csproj or .sln. "
-        "Returns the list of diagnostics (code, message, file, line, column, project). "
+        "Returns the list of diagnostics (code, file, line, column, project). "
         "Requires Windows + .NET Framework 4.8. The runner is downloaded and cached "
         "on first use."
     ),
+    annotations=_STANDARD_ANNOTATIONS,
 )
 async def analyze_project(
     project_path: Annotated[
@@ -110,6 +119,7 @@ async def analyze_project(
         "reference_project_path or set ACUMINATOR_MCP_REFERENCE_PROJECT to override. "
         "Returns only diagnostics reported against the snippet."
     ),
+    annotations=_STANDARD_ANNOTATIONS,
 )
 async def analyze_snippet(
     code: Annotated[
@@ -148,6 +158,7 @@ async def analyze_snippet(
         "like PX1014. Use this after analyze_project / analyze_snippet to look up the "
         "rationale and fix for a reported diagnostic."
     ),
+    annotations=_STANDARD_ANNOTATIONS,
 )
 async def get_diagnostic_docs_tool(
     code: Annotated[
