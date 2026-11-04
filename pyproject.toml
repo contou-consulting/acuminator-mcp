@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "acuminator-mcp"
-version = "1.2.1"
+version = "1.2.2"
 description = "MCP server exposing the Acuminator static analyzer for Acumatica ERP customizations"
 readme = "README.md"
 license = { text = "MIT" }

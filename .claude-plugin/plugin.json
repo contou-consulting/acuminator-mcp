@@ -1,11 +1,24 @@
 {
   "name": "acuminator",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Acuminator static analysis for Acumatica customizations as MCP tools: analyze a project or a C# snippet, look up PX#### diagnostic docs, baseline a legacy project with suppression files. Windows only; needs uv on PATH (winget install astral-sh.uv) and .NET Framework 4.8.",
   "author": { "name": "Contou Consulting", "email": "kyle@contou.com" },
   "homepage": "https://github.com/contou-consulting/acuminator-mcp",
   "repository": "https://github.com/contou-consulting/acuminator-mcp",
   "license": "MIT",
   "keywords": ["acumatica", "acuminator", "static-analysis", "mcp"],
-  "skills": ["./skills"]
+  "skills": ["./skills"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/check-uv.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -46,7 +46,7 @@ gh auth setup-git
 
 ```powershell
 # pin to a release (recommended)
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v1.2.1
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v1.2.2
 
 # or track main
 pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
@@ -63,7 +63,7 @@ acuminator-mcp --help   # prints nothing; it's a stdio server. Ctrl+C exits.
 ### Upgrading
 
 ```powershell
-pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.2.1
+pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.2.2
 ```
 
 ### Or install as a Claude Code plugin
@@ -81,7 +81,10 @@ organization library under `/plugin → Marketplaces` and run:
 
 Anyone else can add this repo directly: `claude plugin install contou-consulting/acuminator-mcp`.
 The plugin pins the server to the matching release tag in `.mcp.json`; `uvx`
-builds the environment on first launch and caches it.
+builds the environment on first launch and caches it. A `SessionStart` hook
+(`hooks/check-uv.sh`) checks that `uvx` is on `PATH` and, when it isn't, tells
+Claude the server can't start and how to install `uv` — otherwise a missing
+`uv` just shows as a silently disconnected server.
 
 ---
 
