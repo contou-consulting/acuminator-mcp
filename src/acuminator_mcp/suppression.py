@@ -28,7 +28,8 @@ def projects_in(code_source: Path) -> list[Path]:
 
 def _references_additional_file(csproj_text: str, file_name: str) -> bool:
     pattern = re.compile(r"<AdditionalFiles\s+Include\s*=\s*\"([^\"]+)\"", re.IGNORECASE)
-    return any(Path(m).name.lower() == file_name.lower() for m in pattern.findall(csproj_text))
+    # Includes are written with either separator regardless of host OS.
+    return any(m.replace("\\", "/").rsplit("/", 1)[-1].lower() == file_name.lower() for m in pattern.findall(csproj_text))
 
 
 def ensure_suppression_setup(code_source: Path) -> tuple[list[Path], list[Path]]:

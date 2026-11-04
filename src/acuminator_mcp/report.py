@@ -26,9 +26,7 @@ once and never for a repeated absolute path prefix.
 
 from __future__ import annotations
 
-import contextlib
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -178,12 +176,21 @@ def parse_report_file(path: Path) -> ParsedReport:
     return parse_report(path.read_text(encoding="utf-8"))
 
 
+def _relative_path(file: str, base_dir: Path | None) -> str:
+    """``file`` relative to ``base_dir`` with forward slashes, or unchanged when
+    it isn't under ``base_dir`` (e.g. another drive). Pure string work so the
+    runner's Windows paths parse the same on every OS."""
+    path = file.replace("\\", "/")
+    if base_dir is None:
+        return path
+    base = str(base_dir).replace("\\", "/").rstrip("/") + "/"
+    if path.lower().startswith(base.lower()):
+        return path[len(base) :]
+    return path
+
+
 def _location(d: Diagnostic, base_dir: Path | None) -> str:
-    path = d.file or "?"
-    if base_dir is not None and d.file:
-        with contextlib.suppress(ValueError):  # different drive on Windows
-            path = os.path.relpath(d.file, base_dir)
-    path = path.replace("\\", "/")
+    path = _relative_path(d.file, base_dir) if d.file else "?"
     if d.line is None:
         return path
     return f"{path}:{d.line}:{d.column}"
