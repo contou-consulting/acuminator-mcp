@@ -71,11 +71,12 @@ pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git
 The repo is also a Claude Code plugin (`.claude-plugin/plugin.json` + `.mcp.json`)
 that launches the server with [`uv`](https://docs.astral.sh/uv/) — no `pipx install`
 needed, just `winget install astral-sh.uv`. It ships a skill that tells Claude when
-and how to use the tools. CTC staff get it from the `ctc-skills` marketplace:
+and how to use the tools. CTC staff get it from the Contou organization plugin
+library on claude.ai — add it from the library page, or in Claude Code add the
+organization library under `/plugin → Marketplaces` and run:
 
 ```
-/plugin marketplace add git@gitlab.contou.com:internal-tools/claude-skills.git
-/plugin install acuminator@ctc-skills
+/plugin install acuminator@claudeai-organization-library
 ```
 
 Anyone else can add this repo directly: `claude plugin install contou-consulting/acuminator-mcp`.
