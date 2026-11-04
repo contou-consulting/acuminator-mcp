@@ -46,7 +46,7 @@ gh auth setup-git
 
 ```powershell
 # pin to a release (recommended)
-pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v1.0.0
+pipx install git+https://github.com/contou-consulting/acuminator-mcp.git@v1.1.0
 
 # or track main
 pipx install git+https://github.com/contou-consulting/acuminator-mcp.git
@@ -63,7 +63,7 @@ acuminator-mcp --help   # prints nothing; it's a stdio server. Ctrl+C exits.
 ### Upgrading
 
 ```powershell
-pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.0.1
+pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.1.0
 ```
 
 ---
