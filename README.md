@@ -66,6 +66,22 @@ acuminator-mcp --help   # prints nothing; it's a stdio server. Ctrl+C exits.
 pipx install --force git+https://github.com/contou-consulting/acuminator-mcp.git@v1.1.0
 ```
 
+### Or install as a Claude Code plugin
+
+The repo is also a Claude Code plugin (`.claude-plugin/plugin.json` + `.mcp.json`)
+that launches the server with [`uv`](https://docs.astral.sh/uv/) — no `pipx install`
+needed, just `winget install astral-sh.uv`. It ships a skill that tells Claude when
+and how to use the tools. CTC staff get it from the `ctc-skills` marketplace:
+
+```
+/plugin marketplace add git@gitlab.contou.com:internal-tools/claude-skills.git
+/plugin install acuminator@ctc-skills
+```
+
+Anyone else can add this repo directly: `claude plugin install contou-consulting/acuminator-mcp`.
+The plugin pins the server to the matching release tag in `.mcp.json`; `uvx`
+builds the environment on first launch and caches it.
+
 ---
 
 ## 2. Use
@@ -365,7 +381,8 @@ Next tool invocation will re-download.
 
 ### Releasing
 
-1. Bump `version` in `pyproject.toml` and `src/acuminator_mcp/__init__.py`.
+1. Bump `version` in `pyproject.toml`, `src/acuminator_mcp/__init__.py` and
+   `.claude-plugin/plugin.json`, and the `@vX.Y.Z` pin in `.mcp.json`.
 2. Commit and push.
 3. `git tag vX.Y.Z && git push --tags`.
 4. The `Release` workflow builds the sdist + wheel and creates a GitHub release
