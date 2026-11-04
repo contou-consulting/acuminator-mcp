@@ -388,6 +388,11 @@ Next tool invocation will re-download.
 4. The `Release` workflow builds the sdist + wheel and creates a GitHub release
    with both attached. Employees pin their `pipx install git+https://...@vX.Y.Z` to the new tag.
 
+Never delete or move a tag once a plugin version has pinned it in `.mcp.json`:
+every machine still on that plugin version launches `uvx --from …@vX.Y.Z` and
+fails with `couldn't find remote ref` until it updates the plugin. Cut a new
+patch release instead.
+
 ---
 
 ## License
