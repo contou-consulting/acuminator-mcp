@@ -100,6 +100,10 @@ async def run_analysis(
     enable_px1007: bool = False,
     disable_px1099: bool = False,
     enable_info_diagnostics: bool = False,
+    disable_suppression: bool = False,
+    banned_apis_path: Path | None = None,
+    allowed_apis_path: Path | None = None,
+    work_mode: str = "report-errors",
     verbosity: str = "Warning",
     extra_args: list[str] | None = None,
     timeout_seconds: float = 600.0,
@@ -109,6 +113,10 @@ async def run_analysis(
     Returns ``(exit_code, stderr_text)``. The runner exits non-zero when diagnostics
     are reported — that's not necessarily an error. Callers should still attempt to
     parse the JSON and surface diagnostics.
+
+    ``work_mode`` is one of ``report-errors`` (default), ``generate-suppressions``
+    or ``report-and-generate``; the latter two write ``<Project>.acuminator``
+    suppression files next to the analyzed project(s).
     """
     exe = await ensure_runner()
 
@@ -132,6 +140,14 @@ async def run_analysis(
         args.append("--disable-PX1099")
     if enable_info_diagnostics:
         args.append("--enable-info-diagnostics")
+    if disable_suppression:
+        args.append("--disable-suppression")
+    if banned_apis_path is not None:
+        args += ["--banned-APIs-path", str(banned_apis_path)]
+    if allowed_apis_path is not None:
+        args += ["--allowed-APIs-path", str(allowed_apis_path)]
+    if work_mode != "report-errors":
+        args += ["--work-mode", work_mode]
     if extra_args:
         args.extend(extra_args)
 

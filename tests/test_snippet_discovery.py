@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from acuminator_mcp.snippet import discover_reference_project
+from acuminator_mcp.snippet import _wrap_snippet, discover_reference_project
+
+
+def test_wrap_snippet_reports_prelude_so_lines_map_back_to_input() -> None:
+    code = "public class Foo {}\n"
+    text, prelude = _wrap_snippet(code)
+    assert text.splitlines()[prelude] == "public class Foo {}", "input line 1 sits at file line prelude+1"
+
+    full_unit = "using PX.Data;\npublic class Foo {}\n"
+    text, prelude = _wrap_snippet(full_unit)
+    assert prelude == 1
+    assert text.splitlines()[1] == "using PX.Data;"
 
 
 def _touch_csproj(path: Path) -> Path:

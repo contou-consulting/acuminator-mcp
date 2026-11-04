@@ -13,6 +13,10 @@ import httpx
 from acuminator_mcp.config import DOCS_CACHE, DOCS_RAW_URL
 
 _CODE_PATTERN = re.compile(r"^PX\d{4}$")
+_SECTION_PATTERN = re.compile(r"^## (.+?)\s*$", re.MULTILINE)
+# Top-level sections dropped unless ``full=True``. The incorrect-code example
+# restates what the diagnostic message already says; Related Articles are links.
+_TRIMMED_SECTIONS = frozenset({"example of incorrect code", "related articles"})
 
 
 class DocsError(RuntimeError):
@@ -28,11 +32,33 @@ def _normalize_code(code: str) -> str:
     return code
 
 
-async def get_diagnostic_docs(code: str, *, use_cache: bool = True) -> str:
+def trim_docs(markdown: str) -> str:
+    """Drop the top-level ``## `` sections in :data:`_TRIMMED_SECTIONS`."""
+    headings = list(_SECTION_PATTERN.finditer(markdown))
+    if not headings:
+        return markdown
+    kept: list[str] = [markdown[: headings[0].start()]]
+    for i, h in enumerate(headings):
+        end = headings[i + 1].start() if i + 1 < len(headings) else len(markdown)
+        if h.group(1).strip().lower() not in _TRIMMED_SECTIONS:
+            kept.append(markdown[h.start() : end])
+    return "".join(kept).rstrip() + "\n"
+
+
+async def get_diagnostic_docs(code: str, *, use_cache: bool = True, full: bool = False) -> str:
     """Return the markdown documentation for an Acuminator diagnostic code.
+
+    Unless ``full`` is set, the incorrect-code example and related-articles
+    sections are removed (see :func:`trim_docs`). The on-disk cache always
+    holds the full document.
 
     Raises :class:`DocsError` if the code isn't documented upstream.
     """
+    markdown = await _fetch_docs(code, use_cache=use_cache)
+    return markdown if full else trim_docs(markdown)
+
+
+async def _fetch_docs(code: str, *, use_cache: bool) -> str:
     normalized = _normalize_code(code)
     DOCS_CACHE.mkdir(parents=True, exist_ok=True)
     cache_path = DOCS_CACHE / f"{normalized}.md"

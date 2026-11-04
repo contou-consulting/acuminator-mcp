@@ -37,7 +37,7 @@ from pathlib import Path
 
 from acuminator_mcp import runner
 from acuminator_mcp.config import reference_project_path
-from acuminator_mcp.report import AnalysisResult, Diagnostic, parse_report_file
+from acuminator_mcp.report import DEFAULT_MAX_DIAGNOSTICS, AnalysisResult, Diagnostic, parse_report_file, summarize
 
 
 class SnippetError(RuntimeError):
@@ -57,12 +57,6 @@ _IGNORED_DIRS = frozenset(
     }
 )
 _MAX_DISCOVERY_DEPTH = 4
-
-
-def _project_dir(project_path: Path) -> Path:
-    if project_path.is_dir():
-        return project_path
-    return project_path.parent
 
 
 def _first_csproj_in_dir(dir_path: Path) -> Path | None:
@@ -140,25 +134,26 @@ def _resolve_reference(override: str | None) -> Path:
             f"the server's CWD ({Path.cwd()}). Point the tool at an Acumatica .csproj "
             "whose references resolve the Acumatica Framework."
         )
-    if not target.exists():
-        raise SnippetError(f"Reference project does not exist: {target}")
+    if not target.is_file() or target.suffix.lower() != ".csproj":
+        raise SnippetError(f"Reference project must be an existing .csproj file: {target}")
     return target
 
 
-def _wrap_snippet(code: str) -> str:
+def _wrap_snippet(code: str) -> tuple[str, int]:
+    """Return ``(file_text, prelude_lines)``; subtract ``prelude_lines`` from
+    reported line numbers to map them back onto ``code``."""
     stripped = code.lstrip()
     if stripped.startswith("using ") or stripped.startswith("namespace "):
-        return _SNIPPET_WRAPPER_HEADER + code
-    wrapped = (
+        return _SNIPPET_WRAPPER_HEADER + code, 1
+    prelude = (
         "using PX.Data;\n"
         "using PX.Objects;\n"
         "\n"
         "namespace AcuminatorMcp.Snippet\n"
         "{\n"
-        f"{code}\n"
-        "}\n"
     )
-    return _SNIPPET_WRAPPER_HEADER + wrapped
+    wrapped = _SNIPPET_WRAPPER_HEADER + prelude + f"{code}\n}}\n"
+    return wrapped, 1 + prelude.count("\n")
 
 
 async def analyze_snippet(
@@ -166,6 +161,7 @@ async def analyze_snippet(
     *,
     reference_project_path: str | None = None,
     isv_mode: bool = False,
+    max_diagnostics: int = DEFAULT_MAX_DIAGNOSTICS,
 ) -> AnalysisResult:
     """Analyze a C# snippet against a reference Acumatica project.
 
@@ -173,11 +169,12 @@ async def analyze_snippet(
     Acuminator reported against the planted snippet file.
     """
     ref_project = _resolve_reference(reference_project_path)
-    project_dir = _project_dir(ref_project)
+    project_dir = ref_project.parent
 
     snippet_name = f"AcuminatorMcpSnippet_{uuid.uuid4().hex[:12]}.cs"
     snippet_path = project_dir / snippet_name
-    snippet_path.write_text(_wrap_snippet(code), encoding="utf-8")
+    file_text, prelude_lines = _wrap_snippet(code)
+    snippet_path.write_text(file_text, encoding="utf-8")
 
     try:
         with tempfile.TemporaryDirectory(prefix="acuminator-mcp-") as tmp:
@@ -208,9 +205,15 @@ async def analyze_snippet(
             return True
         return os.path.normcase(d.file) == os.path.normcase(snippet_abs)
 
-    snippet_diagnostics = [d for d in full.diagnostics if _targets_snippet(d)]
-    return AnalysisResult(
-        code_source=f"snippet://{snippet_name} (ref: {ref_project})",
-        total_diagnostics=len(snippet_diagnostics),
-        diagnostics=snippet_diagnostics,
+    # Report locations as ``snippet:line:col`` with lines relative to the caller's input.
+    snippet_diagnostics = [
+        d.model_copy(update={"file": "snippet", "line": d.line - prelude_lines if d.line else None})
+        for d in full.diagnostics
+        if _targets_snippet(d)
+    ]
+    return summarize(
+        snippet_diagnostics,
+        code_source=f"snippet (ref: {ref_project})",
+        base_dir=None,
+        max_diagnostics=max_diagnostics,
     )

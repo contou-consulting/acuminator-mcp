@@ -103,7 +103,7 @@ Verify it connected — inside a Claude Code session:
 /mcp
 ```
 
-You should see `acuminator` listed as *connected* with three tools.
+You should see `acuminator` listed as *connected* with four tools.
 
 ### In Claude Desktop
 
@@ -143,28 +143,40 @@ Run Acuminator against an Acumatica `.csproj` or `.sln`.
 | `enable_px1007` | `bool` | `false` | Require XML docs on DACs/DAC fields. |
 | `disable_px1099` | `bool` | `false` | Disable the banned-APIs diagnostic. |
 | `enable_info_diagnostics` | `bool` | `false` | Include `Info`-severity diagnostics. |
+| `disable_suppression` | `bool` | `false` | Also report diagnostics hidden by `<Project>.acuminator` files or `// Acuminator disable once …` comments. |
+| `banned_apis_path` | `string` | — | Custom banned-APIs file for PX1099 (format in the [PX1099 docs](https://github.com/Acumatica/Acuminator/blob/master/docs/diagnostics/PX1099.md)). |
+| `allowed_apis_path` | `string` | — | Custom allowed-APIs file for PX1099. |
+| `max_diagnostics` | `int` | `200` | Cap on the number of locations returned across all groups. |
 
 Returns `AnalysisResult`:
 
 ```json
 {
   "code_source": "C:\\src\\MyExt\\MyExt.csproj",
-  "total_diagnostics": 2,
-  "diagnostics": [
+  "total_diagnostics": 3,
+  "counts_by_code": { "PX1014": 2, "PX1069": 1 },
+  "groups": [
     {
       "code": "PX1014",
-      "file": "C:\\src\\MyExt\\DAC\\CTCWidget.cs",
-      "line": 12,
-      "column": 5,
-      "project": "MyExt"
+      "message": "A DAC field must have a nullable type",
+      "locations": ["DAC/CTCWidget.cs:12:5", "DAC/CTCWidget.cs:15:5"]
+    },
+    {
+      "code": "PX1069",
+      "message": "\"CTCWidget\" DAC must declare the mandatory \"tstamp\", \"CreatedByID\", \"LastModifiedDateTime\" DAC fields",
+      "locations": ["DAC/CTCWidget.cs:8:18"]
     }
-  ]
+  ],
+  "truncated": false
 }
 ```
 
-Diagnostic messages are intentionally omitted — the code is a stable handle.
-Call `get_diagnostic_docs` with the returned code for the full rationale and
-fix.
+The shape is built for small context footprints: hits are grouped by
+`(code, message)` so each message appears once, paths are relative to the
+analyzed `.csproj`/`.sln` directory, and `line:col` are 1-based. `groups` stops
+after `max_diagnostics` locations (largest groups first) and `truncated` flips
+to `true`; `counts_by_code` is always complete. The message is usually enough
+to act on — reach for `get_diagnostic_docs` only when it isn't.
 
 #### `analyze_snippet`
 
@@ -176,6 +188,7 @@ sees the full `PX.Data` type environment.
 | `code` | `string` | — | The C# snippet. May be a full compilation unit (starts with `using` or `namespace`) or just type declarations — see auto-wrapping below. |
 | `reference_project_path` | `string` | — | Optional absolute path to the reference `.csproj`. Overrides the env var and auto-discovery. |
 | `isv_mode` | `bool` | `false` | Stricter analysis; promotes some warnings to errors. |
+| `max_diagnostics` | `int` | `200` | Cap on the number of locations returned. |
 
 The server picks the reference project in this order:
 
@@ -188,23 +201,60 @@ The server picks the reference project in this order:
 **Auto-wrapping.** If `code` doesn't already start with `using` or `namespace`,
 the server wraps it with `using PX.Data; using PX.Objects;` and a
 `namespace AcuminatorMcp.Snippet { … }` block before analysis. This lets you
-submit just a DAC or graph class without boilerplate, but it shifts the
-`line`/`column` in returned diagnostics by the size of the injected prelude
-(the prelude is 5 lines, so a diagnostic at line 7 corresponds to line 2 of
-your input). Pass a snippet that starts with `using` or `namespace` yourself
-if you want line numbers to match your input exactly, or need usings the
-default doesn't include.
+submit just a DAC or graph class without boilerplate. Locations come back as
+`snippet:line:col` with line numbers already mapped onto your input (the
+injected prelude is subtracted). Pass a snippet that starts with `using` or
+`namespace` yourself if you need usings the default doesn't include.
 
-Returns only diagnostics that target the snippet. The server writes a temp
+Returns only diagnostics that target the snippet, in the same `AnalysisResult`
+shape as `analyze_project`. The server writes a temp
 `.cs` file into the project's directory, runs the analyzer, and deletes the
 file. Consider adding `AcuminatorMcpSnippet_*.cs` to your `.gitignore` in case
 a crash ever orphans one.
+
+#### `generate_suppressions`
+
+**Writes into your source tree.** Runs the analysis in Acuminator's
+`report-and-generate` work mode, which records every diagnostic found in a
+`<ProjectName>.acuminator` suppression file next to each analyzed project
+(creating or extending it). Subsequent `analyze_project` runs then report only
+*new* issues — the usual way to baseline a legacy project before enforcing
+Acuminator in CI. The runner refuses to generate unless the file already
+exists and the project lists it as an `<AdditionalFiles>` item, so for a
+project that has neither the tool creates the empty file and appends
+
+```xml
+<ItemGroup>
+  <AdditionalFiles Include="MyProject.acuminator" />
+</ItemGroup>
+```
+
+to the `.csproj` (for a `.sln`, every project it lists). Returns the same
+`AnalysisResult` shape plus `suppression_files` and `project_files_modified`.
+Review and commit those files.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `project_path` | `string` | — | Absolute path to the `.csproj` or `.sln`. |
+| `isv_mode` | `bool` | `false` | Baseline with ISV-mode severities. |
+| `banned_apis_path` / `allowed_apis_path` | `string` | — | As for `analyze_project`. |
+| `max_diagnostics` | `int` | `200` | Cap on the locations returned (the suppression file is always complete). |
+
+The runner matches the suppression file by **project name**: `CCIS.Acu.csproj`
+reads `CCIS.Acu.acuminator`. A file left behind by a renamed project is silently
+ignored — `analyze_project` with `disable_suppression=true` vs `false` giving
+the same counts is the tell.
 
 #### `get_diagnostic_docs`
 
 Fetches the markdown at
 `https://raw.githubusercontent.com/Acumatica/Acuminator/refs/heads/master/docs/diagnostics/<code>.md`
 and caches to disk.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `code` | `string` | — | Diagnostic code, e.g. `PX1014`. |
+| `full` | `bool` | `false` | Return the whole document. By default the top-level *Example of Incorrect Code* and *Related Articles* sections are dropped; the summary table, description, code-fix behavior and fixed-code example are kept. |
 
 ### Environment variables
 
