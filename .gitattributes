@@ -1,0 +1,3 @@
+# Hook scripts run under sh; a CRLF checkout (core.autocrlf=true on Windows)
+# would break them with "\r: command not found".
+*.sh text eol=lf
